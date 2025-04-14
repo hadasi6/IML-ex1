@@ -14,7 +14,8 @@ def load_data(filename: str) -> pd.DataFrame:
     -------
     Design matrix and response vector (Temp)
     """
-    pass
+    df = pd.read_csv(filename)
+    
 
 
 if __name__ == '__main__':

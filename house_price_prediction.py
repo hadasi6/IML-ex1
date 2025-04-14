@@ -1,8 +1,11 @@
 
-
+import plotly.graph_objects as go #todo - change!
+from typing import NoReturn
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+import os
 
 def preprocess_train(X: pd.DataFrame, y: pd.Series):
     """
@@ -32,6 +35,10 @@ def preprocess_train(X: pd.DataFrame, y: pd.Series):
     # Remove rows with missing values
     X.dropna(inplace=True)
     y = y.loc[X.index]
+
+    # Remove rows with missing values in y 
+    y.dropna(inplace=True)  
+    X = X.loc[y.index]
 
     # Remove unrealistic or extreme values
     mask = (
@@ -148,7 +155,7 @@ def feature_evaluation(X: pd.DataFrame, y: pd.Series, output_path: str = ".") ->
     output_path: str (default ".")
         Path to folder in which plots are saved
     """
-        # Ensure output directory exists
+    # Ensure output directory exists
     os.makedirs(output_path, exist_ok=True)
 
     for feature in X.columns:
@@ -159,17 +166,33 @@ def feature_evaluation(X: pd.DataFrame, y: pd.Series, output_path: str = ".") ->
         pearson_corr = cov / (std_x * std_y)
 
         # Create scatter plot
-        plt.figure(figsize=(8, 6))
-        plt.scatter(X[feature], y, alpha=0.5)
-        plt.title(f"Feature: {feature}\nPearson Correlation: {pearson_corr:.2f}")
-        plt.xlabel(feature)
-        plt.ylabel("Response (y)")
-        plt.grid()
+        fig = go.Figure(data=go.Scatter(
+            x=X[feature],
+            y=y,
+            mode='markers',
+            marker=dict(opacity=0.5),
+            name=feature
+        ))
+        fig.update_layout(
+            title=f"{feature} vs price<br>Pearson Correlation: {pearson_corr:.3f}",
+            xaxis_title=feature,
+            yaxis_title="price"
+        )
 
         # Save plot
-        plot_path = os.path.join(output_path, f"{feature}_correlation.png")
-        plt.savefig(plot_path)
-        plt.close()
+        fig.write_image(os.path.join(output_path, f"{feature}_vs_price.png"))
+        # Create scatter plot
+        # plt.figure(figsize=(8, 6))
+        # plt.scatter(X[feature], y, alpha=0.5)
+        # plt.title(f"Feature: {feature}\nPearson Correlation: {pearson_corr:.2f}")
+        # plt.xlabel(feature)
+        # plt.ylabel("Response (y)")
+        # plt.grid()
+
+        # Save plot
+        # plot_path = os.path.join(output_path, f"{feature}_correlation.png")
+        # plt.savefig(plot_path)
+        # plt.close()
 
 
 if __name__ == '__main__':
@@ -196,4 +219,30 @@ if __name__ == '__main__':
     #   3) Test fitted model over test set
     #   4) Store average and variance of loss over test set
     # Then plot average loss as function of training size with error ribbon of size (mean-2*std, mean+2*std)
+    means, stds, percentages = [], [], list(range(10, 101))
+    for p in percentages:
+        losses = []
+        for _ in range(10):
+            sample_X = X_train.sample(frac=p / 100)
+            sample_y = y_train.loc[sample_X.index]
+            model = LinearRegression()
+            model.fit(sample_X, sample_y)
+            y_pred = model.predict(X_test)
+            loss = np.mean((y_test - y_pred) ** 2)
+            losses.append(loss)
+        means.append(np.mean(losses))
+        stds.append(np.std(losses))
 
+    fig = go.Figure([
+        go.Scatter(x=percentages, y=means, mode="lines+markers", name="Mean Loss"),
+        go.Scatter(x=percentages, y=np.array(means) - 2 * np.array(stds),
+                   name="Mean - 2*STD", line=dict(dash="dash")),
+        go.Scatter(x=percentages, y=np.array(means) + 2 * np.array(stds),
+                   name="Mean + 2*STD", line=dict(dash="dash"))
+    ])
+    fig.update_layout(title="Model Loss vs. Training Set Size",
+                      xaxis_title="Training Set Size (%)",
+                      yaxis_title="Mean Squared Error",
+                      height=500)
+    fig.show()
+    # fig.write_image("model_loss_vs_training_size.png")
