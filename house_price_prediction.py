@@ -1,11 +1,40 @@
-
-import plotly.graph_objects as go #todo - change!
+import plotly.graph_objects as go
+import plotly.express as px
 from typing import NoReturn
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
+# from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
-import os
+# import os
+
+RANDOM_SEED = 0
+
+def _add_columns(X: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add derived columns to the dataset.
+
+    Parameters
+    ----------
+    X : pd.DataFrame
+        The input DataFrame.
+
+    Returns
+    -------
+    pd.DataFrame
+        The DataFrame with additional columns.
+    """
+     # Extract year of sale
+    
+    X['date'] = pd.to_datetime(X['date']).dt.year 
+    # Calculate decade of construction 
+    X['decade'] = (X['yr_built'] // 10) * 10  
+    curr_yr = 2015
+    X['renovated_last_decade'] = X['yr_renovated'].apply(
+        lambda x: 1 if (x != 0) and ((curr_yr - x) <= 10) else 0
+    )
+    X['was_renovated'] = X['yr_renovated'].apply(lambda x: 1 if x > 0 else 0)
+    X['bedrooms_to_living_ratio'] = X['bedrooms'] / X['sqft_living']
+    return X
 
 def preprocess_train(X: pd.DataFrame, y: pd.Series):
     """
@@ -20,91 +49,50 @@ def preprocess_train(X: pd.DataFrame, y: pd.Series):
     -------
     A clean, preprocessed version of the data
     """
-    global train_columns
+    # Add new columns
+    X = _add_columns(X)
 
-    # Create copies to avoid modifying original data
-    X = X.copy()
-    y = y.copy()
+    # Remove irrelevant columns
+    remove_columns = ['id', 'date', 'lat', 'long', 'yr_built', 'yr_renovated']
+    X = X.drop(remove_columns, axis=1, errors='ignore')
 
-    # Remove irrelevant features
-    X.drop(columns=["id", "date", "lat", "long"], inplace=True, errors='ignore')
-
-    # Remove duplicates
-    X.drop_duplicates(inplace=True)
-
-    # Remove rows with missing values
-    X.dropna(inplace=True)
+    # Clean data: remove duplicates and missing values
+    X.drop_duplicates(inplace=True) # Remove duplicates
+    X.dropna(inplace=True) # Remove rows with missing values
     y = y.loc[X.index]
-
-    # Remove rows with missing values in y 
-    y.dropna(inplace=True)  
+    y.dropna(inplace=True)  # Remove rows with missing values in y 
     X = X.loc[y.index]
+
+    # X.dropna(inplace=True) # delete empty values & duplicates
+    # X.drop_duplicates(inplace=True)
+    # X = X.loc[y.dropna().index]
+    # y = y.dropna()
+    # y = y[X.index] # delete the same items from y
+
 
     # Remove unrealistic or extreme values
     mask = (
-        (X["bedrooms"] > 0) &
-        (X["bathrooms"] > 0) &
-        (X["sqft_living"] >= 200) &
-        (X["sqft_lot"] > 0) &
-        (X["sqft_above"] > 0) &
-        (X["sqft_basement"] >= 0) &
-        (X["yr_built"] > 0) &
-        (X["yr_renovated"] >= 0)
+        (X['sqft_living'] <= X['sqft_lot']) &
+        (X['bedrooms'] >= 0) &
+        (X['bathrooms'] >= 0) &
+        (X['floors'] >= 0) &
+        (X['sqft_lot'] > 0) &
+        (X['condition'].isin(range(1, 6))) &
+        (X['decade'] > 0) &
+        (X['view'].isin(range(5))) &
+        (X['grade'].isin(range(1, 15))) &
+        (X['sqft_above'] > 0) &
+        (X['sqft_basement'] >= 0) &
+        (X['waterfront'].isin([0, 1]))
     )
     X = X[mask]
     y = y.loc[X.index] 
-
-    # Drop outliers (basic filtering)
-    X = X[X["bedrooms"] < 20]
-    X = X[X["sqft_lot"] < 1250000]
-    y = y.loc[X.index]
-
-    # Feature engineering
-    current_year = 2015
-    X["house_age"] = current_year - X["yr_built"]
-    X["was_renovated"] = (X["yr_renovated"] > 0).astype(int)
-
-    # Drop original year columns
-    X.drop(columns=["yr_built", "yr_renovated"], inplace=True)
-
-    # Save feature structure for test set
-    train_columns = X.columns.tolist()
-
-    # Reset index
-    X.reset_index(drop=True, inplace=True)
-    y.reset_index(drop=True, inplace=True)
+    X.replace('nan', np.nan)
+    y = y[X.index]
 
     return X, y
-
-    # # remove rows with missing values
-    # X_df = X.dropna().drop_duplicates()
-    # # remove rows with missing values in y
-    # y_df = y.loc[X.index]
-
-    # # remove rows with invalid values:
-
-    # # remove rows with yr_renovated < yr_built
-    # if "yr_renovated" in X_df.columns and "yr_built" in X_df.columns:
-    #     invalid_rows = X_df[X_df["yr_renovated"] < X_df["yr_built"]].index
-    #     X_df = X_df.drop(index=invalid_rows)
-    #     y_df = y_df.loc[X_df.index]
     
-    # # remove rows with sqft_living <= 0
-    # if "sqft_living" in X_df.columns:
-    #     invalid_rows = X_df[X_df["sqft_living"] <= 0].index
-    #     X_df = X_df.drop(index=invalid_rows)
-    #     y_df = y_df.loc[X_df.index]
     
-    # # remove irrelevant columns: "id", "lat", "long", "date"
-    # irrelevant_columns = ["id", "lat", "long", "date"]
-    # X_df = X_df.drop(columns=irrelevant_columns, axis=1)
-    # y_df = y_df.loc[X_df.index]
-
-    
-
-    
-
-
 def preprocess_test(X: pd.DataFrame):
     """
     preprocess test data. You are not allowed to remove rows from X, but only edit its columns.
@@ -117,24 +105,15 @@ def preprocess_test(X: pd.DataFrame):
     -------
     A preprocessed version of the test data that matches the coefficients format.
     """
-    global train_columns
+    # Add new columns
+    X = _add_columns(X)
 
-    X = X.copy()
+    # Remove irrelevant columns
+    remove_columns = ['id', 'date', 'lat', 'long', 'yr_built', 'yr_renovated']
+    X = X.drop(remove_columns, axis=1, errors='ignore')
 
-    # Apply same transformations as in train
-    X.drop(columns=["id", "date", "lat", "long"], inplace=True, errors='ignore')
-    current_year = 2015
-    X["house_age"] = current_year - X["yr_built"]
-    X["was_renovated"] = (X["yr_renovated"] > 0).astype(int)
-    X.drop(columns=["yr_built", "yr_renovated"], inplace=True)
-
-    # Ensure test set has same columns as train
-    for col in train_columns:
-        if col not in X.columns:
-            X[col] = 0
-    X = X[train_columns]
-
-    X.reset_index(drop=True, inplace=True)
+    # Fill missing values with the mean of each column
+    X.fillna(X.mean(), inplace=True)
     return X
 
 
@@ -155,44 +134,61 @@ def feature_evaluation(X: pd.DataFrame, y: pd.Series, output_path: str = ".") ->
     output_path: str (default ".")
         Path to folder in which plots are saved
     """
-    # Ensure output directory exists
-    os.makedirs(output_path, exist_ok=True)
-
+    # correlations = {}
     for feature in X.columns:
-        # Compute Pearson Correlation manually
+        # Compute Pearson Correlation
         cov = np.cov(X[feature], y)[0, 1]
         std_x = np.std(X[feature])
         std_y = np.std(y)
         pearson_corr = cov / (std_x * std_y)
-
+        # correlations[feature] = pearson_corr
         # Create scatter plot
-        fig = go.Figure(data=go.Scatter(
+        fig = px.scatter(
             x=X[feature],
             y=y,
-            mode='markers',
-            marker=dict(opacity=0.5),
-            name=feature
-        ))
-        fig.update_layout(
-            title=f"{feature} vs price<br>Pearson Correlation: {pearson_corr:.3f}",
-            xaxis_title=feature,
-            yaxis_title="price"
+            title=f"{feature} vs Price<br>Pearson Correlation: {pearson_corr:}",
+            labels={"x": feature, "y": "Price"}
         )
-
         # Save plot
-        fig.write_image(os.path.join(output_path, f"{feature}_vs_price.png"))
-        # Create scatter plot
-        # plt.figure(figsize=(8, 6))
-        # plt.scatter(X[feature], y, alpha=0.5)
-        # plt.title(f"Feature: {feature}\nPearson Correlation: {pearson_corr:.2f}")
-        # plt.xlabel(feature)
-        # plt.ylabel("Response (y)")
-        # plt.grid()
+        fig.write_image(f"{output_path}/{feature}_vs_price.png")
+        # fig.write_image(os.path.join(output_path, f"{feature}_vs_price.png"))
+    # Sort features by absolute correlation
+    # sorted_features = sorted(correlations.items(), key=lambda x: abs(x[1]), reverse=True)
 
-        # Save plot
-        # plot_path = os.path.join(output_path, f"{feature}_correlation.png")
-        # plt.savefig(plot_path)
-        # plt.close()
+    # Get the best and worst features
+    # best_feature = sorted_features[0]
+    # worst_feature = sorted_features[-1]
+    # print(f"Best Feature: {best_feature[0]}, Correlation: {best_feature[1]:.3f}")
+    # print(f"Worst Feature: {worst_feature[0]}, Correlation: {worst_feature[1]:.3f}")
+    # print("All features sorted by absolute correlation:", sorted_features)
+
+def _split_train_test(X: pd.DataFrame, y: pd.Series, train_size: float = 0.75, random_state: int = 0):
+    """
+    Split data into training and testing sets.
+    Parameters
+    ----------
+    X : pd.DataFrame
+        Feature matrix.
+    y : pd.Series
+        Target vector.
+    train_size : float
+        Proportion of data to include in the training set.
+    random_state : int
+        Seed for reproducibility.
+
+    Returns
+    -------
+    X_train, X_test, y_train, y_test : pd.DataFrame, pd.DataFrame, pd.Series, pd.Series
+        Training and testing sets.
+    """
+    np.random.seed(random_state)
+    train_indices = X.sample(frac=train_size, random_state=random_state).index
+    test_indices = X.index.difference(train_indices)
+
+    X_train, X_test = X.loc[train_indices], X.loc[test_indices]
+    y_train, y_test = y.loc[train_indices], y.loc[test_indices]
+
+    return X_train, X_test, y_train, y_test
 
 
 if __name__ == '__main__':
@@ -200,9 +196,8 @@ if __name__ == '__main__':
     X, y = df.drop("price", axis=1), df.price
 
     # Question 2 - split train test
-    X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=0.75, random_state=0)
-
-
+    # X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=0.75, random_state=RANDOM_SEED)
+    X_train, X_test, y_train, y_test = _split_train_test(X, y, train_size=0.75, random_state=RANDOM_SEED)
     # Question 3 - preprocessing of housing prices train dataset
     X_train, y_train = preprocess_train(X_train, y_train)
 
@@ -245,4 +240,4 @@ if __name__ == '__main__':
                       yaxis_title="Mean Squared Error",
                       height=500)
     fig.show()
-    # fig.write_image("model_loss_vs_training_size.png")
+    fig.write_image("model_loss_vs_training_size.png")

@@ -2,7 +2,6 @@ from typing import NoReturn
 from linear_regression import LinearRegression
 import numpy as np
 
-
 class PolynomialFitting(LinearRegression):
     """
     Polynomial Fitting using Least Squares estimation
@@ -16,9 +15,8 @@ class PolynomialFitting(LinearRegression):
         k : int
             Degree of polynomial to fit
         """
-        super().__init__(include_intercept=True)
+        super().__init__(include_intercept=False)
         self.k_ = k
-        # self.linear_regression_ = LinearRegression(include_intercept=True)
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> NoReturn:
         """
@@ -69,8 +67,8 @@ class PolynomialFitting(LinearRegression):
         loss : float
             Performance under MSE loss function
         """ 
-        X_transformed = self.__transform(X) # Transform input to polynomial features
-        return super().loss(X_transformed, y) # Call the parent class's loss method
+        # Call the parent class's loss method. no need to transform x- the transformation is done in the predict method
+        return super().loss(X, y)
 
     def __transform(self, X: np.ndarray) -> np.ndarray:
         """
@@ -86,4 +84,3 @@ class PolynomialFitting(LinearRegression):
             Vandermonde matrix of given samples up to degree k
         """
         return np.vander(X, N=self.k_ + 1, increasing=True)
-        

@@ -1,7 +1,5 @@
-
 import numpy as np
 from typing import NoReturn
-
 
 class LinearRegression:
     """
@@ -54,7 +52,7 @@ class LinearRegression:
         """
         if self.include_intercept_:
             X = np.c_[np.ones(X.shape[0]), X]
-        self.coefs_ = np.linalg.pinv(X.T @ X) @ X.T @ y
+        self.coefs_ = np.linalg.pinv(X) @ y
         self.fitted = True
 
     def predict(self, X: np.ndarray) -> np.ndarray:
@@ -71,8 +69,8 @@ class LinearRegression:
         responses : ndarray of shape (n_samples, )
             Predicted responses of given samples
         """
-        if not self.fitted_:
-            raise  ValueError("Model must be fitted before prediction.") #todo - validate
+        if not self.fitted:
+            raise ValueError("Model must be fitted before prediction.")
         if self.include_intercept_:
             X = np.c_[np.ones(X.shape[0]), X]
         return X @ self.coefs_
