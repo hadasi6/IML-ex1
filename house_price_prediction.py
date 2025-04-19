@@ -3,11 +3,17 @@ import plotly.express as px
 from typing import NoReturn
 import pandas as pd
 import numpy as np
-# from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
-# import os
 
-RANDOM_SEED = 0
+SEED = 0
+TRAIN_SIZE = 0.75
+CURRENT_YEAR = 2015
+NUM_REPEATS = 10
+CONDITION_RANGE = range(1, 6)
+VIEW_RANGE = range(5)
+GRADE_RANGE = range(1, 15)
+FEATURE_EVAL_OUTPUT_PATH = "feature_evaluation"
+LOSS_PLOT_OUTPUT_PATH = "model_loss_vs_training_size.png"
 
 def _add_columns(X: pd.DataFrame) -> pd.DataFrame:
     """
@@ -24,13 +30,11 @@ def _add_columns(X: pd.DataFrame) -> pd.DataFrame:
         The DataFrame with additional columns.
     """
      # Extract year of sale
-    
     X['date'] = pd.to_datetime(X['date']).dt.year 
     # Calculate decade of construction 
     X['decade'] = (X['yr_built'] // 10) * 10  
-    curr_yr = 2015
     X['renovated_last_decade'] = X['yr_renovated'].apply(
-        lambda x: 1 if (x != 0) and ((curr_yr - x) <= 10) else 0
+        lambda x: 1 if (x != 0) and ((CURRENT_YEAR - x) <= 10) else 0
     )
     X['was_renovated'] = X['yr_renovated'].apply(lambda x: 1 if x > 0 else 0)
     X['bedrooms_to_living_ratio'] = X['bedrooms'] / X['sqft_living']
@@ -63,13 +67,6 @@ def preprocess_train(X: pd.DataFrame, y: pd.Series):
     y.dropna(inplace=True)  # Remove rows with missing values in y 
     X = X.loc[y.index]
 
-    # X.dropna(inplace=True) # delete empty values & duplicates
-    # X.drop_duplicates(inplace=True)
-    # X = X.loc[y.dropna().index]
-    # y = y.dropna()
-    # y = y[X.index] # delete the same items from y
-
-
     # Remove unrealistic or extreme values
     mask = (
         (X['sqft_living'] <= X['sqft_lot']) &
@@ -77,10 +74,10 @@ def preprocess_train(X: pd.DataFrame, y: pd.Series):
         (X['bathrooms'] >= 0) &
         (X['floors'] >= 0) &
         (X['sqft_lot'] > 0) &
-        (X['condition'].isin(range(1, 6))) &
+        (X['condition'].isin(CONDITION_RANGE)) &
         (X['decade'] > 0) &
-        (X['view'].isin(range(5))) &
-        (X['grade'].isin(range(1, 15))) &
+        (X['view'].isin(VIEW_RANGE)) &
+        (X['grade'].isin(GRADE_RANGE)) &
         (X['sqft_above'] > 0) &
         (X['sqft_basement'] >= 0) &
         (X['waterfront'].isin([0, 1]))
@@ -134,14 +131,12 @@ def feature_evaluation(X: pd.DataFrame, y: pd.Series, output_path: str = ".") ->
     output_path: str (default ".")
         Path to folder in which plots are saved
     """
-    # correlations = {}
     for feature in X.columns:
         # Compute Pearson Correlation
         cov = np.cov(X[feature], y)[0, 1]
         std_x = np.std(X[feature])
         std_y = np.std(y)
         pearson_corr = cov / (std_x * std_y)
-        # correlations[feature] = pearson_corr
         # Create scatter plot
         fig = px.scatter(
             x=X[feature],
@@ -151,16 +146,6 @@ def feature_evaluation(X: pd.DataFrame, y: pd.Series, output_path: str = ".") ->
         )
         # Save plot
         fig.write_image(f"{output_path}/{feature}_vs_price.png")
-        # fig.write_image(os.path.join(output_path, f"{feature}_vs_price.png"))
-    # Sort features by absolute correlation
-    # sorted_features = sorted(correlations.items(), key=lambda x: abs(x[1]), reverse=True)
-
-    # Get the best and worst features
-    # best_feature = sorted_features[0]
-    # worst_feature = sorted_features[-1]
-    # print(f"Best Feature: {best_feature[0]}, Correlation: {best_feature[1]:.3f}")
-    # print(f"Worst Feature: {worst_feature[0]}, Correlation: {worst_feature[1]:.3f}")
-    # print("All features sorted by absolute correlation:", sorted_features)
 
 def _split_train_test(X: pd.DataFrame, y: pd.Series, train_size: float = 0.75, random_state: int = 0):
     """
@@ -181,7 +166,6 @@ def _split_train_test(X: pd.DataFrame, y: pd.Series, train_size: float = 0.75, r
     X_train, X_test, y_train, y_test : pd.DataFrame, pd.DataFrame, pd.Series, pd.Series
         Training and testing sets.
     """
-    np.random.seed(random_state)
     train_indices = X.sample(frac=train_size, random_state=random_state).index
     test_indices = X.index.difference(train_indices)
 
@@ -190,6 +174,71 @@ def _split_train_test(X: pd.DataFrame, y: pd.Series, train_size: float = 0.75, r
 
     return X_train, X_test, y_train, y_test
 
+def _plot_loss_vs_training_size(X_train: pd.DataFrame, y_train: pd.Series, X_test: pd.DataFrame, y_test: pd.Series, output_path: str = "model_loss_vs_training_size.png") -> None:
+    """
+    Fit a linear model over increasing percentages of the training data and plot the loss.
+
+    Parameters
+    ----------
+    X_train : pd.DataFrame
+        Training feature matrix.
+    y_train : pd.Series
+        Training target vector.
+    X_test : pd.DataFrame
+        Testing feature matrix.
+    y_test : pd.Series
+        Testing target vector.
+    output_path : str
+        Path to save the plot image.
+    """
+    means, stds, percentages = [], [], list(range(10, 101))
+    for p in percentages:
+        losses = []
+        for _ in range(NUM_REPEATS):
+            sample_X = X_train.sample(frac=p / 100, random_state=SEED)
+            sample_y = y_train.loc[sample_X.index]
+            model = LinearRegression()
+            model.fit(sample_X, sample_y)
+            y_pred = model.predict(X_test)
+            loss = np.mean((y_test - y_pred) ** 2)
+            losses.append(loss)
+        means.append(np.mean(losses))
+        stds.append(np.std(losses))
+
+    # Create the plot
+    fig = go.Figure([
+        go.Scatter(
+            x=percentages, y=means,
+            mode="lines+markers",
+            name="Mean Loss",
+            line=dict(color="blue"),
+            marker=dict(size=6)
+        ),
+        go.Scatter(
+            x=percentages + percentages[::-1],
+            y=(np.array(means) + 2 * np.array(stds)).tolist() + (np.array(means) - 2 * np.array(stds)).tolist()[::-1],
+            fill="toself",
+            fillcolor="rgba(0, 0, 255, 0.2)",  # Light blue
+            line=dict(color="rgba(255,255,255,0)"),
+            hoverinfo="skip"
+        )
+    ])
+    fig.update_layout(
+        title=dict(
+            text="Model Loss vs. Training Set Size",
+            font=dict(size=24),  # Larger font size for the title
+            x=0.5,  # Center the title
+            xanchor="center"
+        ),
+        xaxis_title="Training Set Size (%)",
+        yaxis_title="Mean Squared Error",
+        height=700,  # Increase the height of the plot
+        width=1000,  # Increase the width of the plot
+        margin=dict(t=80, b=50, l=50, r=50),  # Adjust margins for better spacing
+        template="plotly_white",  # Use a clean white background
+        showlegend=False  # Disable the legend
+    )
+    fig.write_image(output_path)
 
 if __name__ == '__main__':
     df = pd.read_csv("house_prices.csv")
@@ -197,12 +246,12 @@ if __name__ == '__main__':
 
     # Question 2 - split train test
     # X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=0.75, random_state=RANDOM_SEED)
-    X_train, X_test, y_train, y_test = _split_train_test(X, y, train_size=0.75, random_state=RANDOM_SEED)
+    X_train, X_test, y_train, y_test = _split_train_test(X, y, train_size=TRAIN_SIZE, random_state=SEED)
     # Question 3 - preprocessing of housing prices train dataset
     X_train, y_train = preprocess_train(X_train, y_train)
 
     # Question 4 - Feature evaluation of train dataset with respect to response
-    feature_evaluation(X_train, y_train, output_path="feature_evaluation")
+    feature_evaluation(X_train, y_train, output_path=FEATURE_EVAL_OUTPUT_PATH)
 
     # Question 5 - preprocess the test data
     X_test = preprocess_test(X_test)
@@ -214,30 +263,4 @@ if __name__ == '__main__':
     #   3) Test fitted model over test set
     #   4) Store average and variance of loss over test set
     # Then plot average loss as function of training size with error ribbon of size (mean-2*std, mean+2*std)
-    means, stds, percentages = [], [], list(range(10, 101))
-    for p in percentages:
-        losses = []
-        for _ in range(10):
-            sample_X = X_train.sample(frac=p / 100)
-            sample_y = y_train.loc[sample_X.index]
-            model = LinearRegression()
-            model.fit(sample_X, sample_y)
-            y_pred = model.predict(X_test)
-            loss = np.mean((y_test - y_pred) ** 2)
-            losses.append(loss)
-        means.append(np.mean(losses))
-        stds.append(np.std(losses))
-
-    fig = go.Figure([
-        go.Scatter(x=percentages, y=means, mode="lines+markers", name="Mean Loss"),
-        go.Scatter(x=percentages, y=np.array(means) - 2 * np.array(stds),
-                   name="Mean - 2*STD", line=dict(dash="dash")),
-        go.Scatter(x=percentages, y=np.array(means) + 2 * np.array(stds),
-                   name="Mean + 2*STD", line=dict(dash="dash"))
-    ])
-    fig.update_layout(title="Model Loss vs. Training Set Size",
-                      xaxis_title="Training Set Size (%)",
-                      yaxis_title="Mean Squared Error",
-                      height=500)
-    fig.show()
-    fig.write_image("model_loss_vs_training_size.png")
+    _plot_loss_vs_training_size(X_train, y_train, X_test, y_test, output_path=LOSS_PLOT_OUTPUT_PATH)

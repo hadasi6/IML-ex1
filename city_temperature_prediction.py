@@ -4,6 +4,17 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, BoundaryNorm
 from polynomial_fitting import PolynomialFitting
 
+SEED = 0
+TRAIN_SIZE = 0.75
+MIN_VALID_TEMP = -50
+MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+ISRAEL = "Israel"
+AVG_DAILY_TEMP_PLOT_PATH = "Avg_Daily_Temp.png"
+MONTHLY_TEMP_STD_PLOT_PATH = "Monthly_Temp_Std.png"
+COUNTRY_MONTHLY_TEMP_PLOT_PATH = "Country_Monthly_Temp.png"
+TEST_ERROR_PLOT_PATH = "test_error_by_degree.png"
+LOSS_BY_COUNTRY_PLOT_PATH = "lossByCountry.png"
+
 def load_data(filename: str) -> pd.DataFrame:
     """
     Load city daily temperature dataset and preprocess data.
@@ -19,14 +30,14 @@ def load_data(filename: str) -> pd.DataFrame:
     df = pd.read_csv(filename, parse_dates=['Date']).dropna().drop_duplicates()
     
     # # Remove invalid data (e.g., negative temperatures) 
-    df = df[df["Temp"] > -50] #todo - validate
+    df = df[df["Temp"] > MIN_VALID_TEMP] #todo - validate
 
     # Add 'DayOfYear' column
     df["DayOfYear"] = df["Date"].dt.dayofyear
 
     return df
 
-def _plot_avg_daily_temp(israel_data: pd.DataFrame, output_path: str = "Avg_Daily_Temp.png") -> None:
+def _plot_avg_daily_temp(israel_data: pd.DataFrame, output_path: str) -> None:
     """
     Plot the average daily temperature in Israel as a function of the day of the year.
     The plot is color-coded by year with a discrete color scale.
@@ -35,7 +46,6 @@ def _plot_avg_daily_temp(israel_data: pd.DataFrame, output_path: str = "Avg_Dail
     ----------
     israel_data : pd.DataFrame
         Filtered dataset containing only samples from Israel.
-
     output_path : str
         Path to save the scatter plot image.
     """
@@ -67,7 +77,6 @@ def _plot_monthly_std(israel_data: pd.DataFrame, output_path: str = "Monthly_Tem
     ----------
     israel_data : pd.DataFrame
         Filtered dataset containing only samples from Israel.
-
     output_path : str
         Path to save the bar plot image.
     """
@@ -82,7 +91,7 @@ def _plot_monthly_std(israel_data: pd.DataFrame, output_path: str = "Monthly_Tem
     plt.ylabel("Standard Deviation (°C)")
     plt.xticks(
         range(12), 
-        ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 
+        MONTH_NAMES, 
         rotation=45
     )
     plt.tight_layout()
@@ -141,7 +150,6 @@ def _split_train_test(data: pd.DataFrame, train_size: float = 0.75, random_state
     ----------
     data : pd.DataFrame
         The dataset to split.
-
     train_size : float, optional
         Proportion of the dataset to include in the training set, by default 0.75.
 
@@ -233,7 +241,7 @@ def _evaluate_model_on_countries(df: pd.DataFrame, model: PolynomialFitting, out
     """
     # Evaluate on other countries
     loss_by_country = []
-    other_countries = df[df["Country"] != "Israel"].Country.unique()
+    other_countries = df[df["Country"] != ISRAEL].Country.unique()
     for country in other_countries:
         country_data = df[df["Country"] == country]
         X_country, y_country = country_data["DayOfYear"].values, country_data["Temp"].values
@@ -264,21 +272,21 @@ if __name__ == '__main__':
     # Question 3 - Exploring data for specific country
 
     # Filter data for Israel
-    israel_data = df[df["Country"] == "Israel"] 
+    israel_data = df[df["Country"] == ISRAEL] 
 
     # Plot average daily temperature
-    _plot_avg_daily_temp(israel_data, output_path="Avg_Daily_Temp.png")
+    _plot_avg_daily_temp(israel_data, output_path=AVG_DAILY_TEMP_PLOT_PATH)
 
     # Plot monthly temperature standard deviation
-    _plot_monthly_std(israel_data, output_path="Monthly_Temp_Std.png")
+    _plot_monthly_std(israel_data, output_path=MONTHLY_TEMP_STD_PLOT_PATH)
 
     # Question 4 - Exploring differences between countries
-    _plot_country_monthly_temp(df, output_path="Country_Monthly_Temp.png")
+    _plot_country_monthly_temp(df, output_path=COUNTRY_MONTHLY_TEMP_PLOT_PATH)
 
     # Question 5 - Fitting model for different values of `k`
     # split dataset
-    train, test = _split_train_test(israel_data, train_size=0.75, random_state=0)
-    test_errors = _fit_and_evaluate_polynomial_models(train, test, output_path="test_error_by_degree.png")
+    train, test = _split_train_test(israel_data, train_size=TRAIN_SIZE, random_state=SEED)
+    test_errors = _fit_and_evaluate_polynomial_models(train, test, output_path=TEST_ERROR_PLOT_PATH)
 
     # Question 6 - Evaluating fitted model on different countries
     # Fit the best model on Israel's data
@@ -287,4 +295,4 @@ if __name__ == '__main__':
     best_model.fit(israel_data["DayOfYear"].values, israel_data["Temp"].values)
 
     # Evaluate on other countries and save the plot
-    loss_df = _evaluate_model_on_countries(df, best_model, output_path="lossByCountry.png")
+    loss_df = _evaluate_model_on_countries(df, best_model, output_path=LOSS_BY_COUNTRY_PLOT_PATH)
