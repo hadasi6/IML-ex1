@@ -270,13 +270,10 @@ if __name__ == '__main__':
     df = load_data("city_temperature.csv")
 
     # Question 3 - Exploring data for specific country
-
     # Filter data for Israel
     israel_data = df[df["Country"] == ISRAEL] 
-
     # Plot average daily temperature
     _plot_avg_daily_temp(israel_data, output_path=AVG_DAILY_TEMP_PLOT_PATH)
-
     # Plot monthly temperature standard deviation
     _plot_monthly_std(israel_data, output_path=MONTHLY_TEMP_STD_PLOT_PATH)
 
@@ -284,7 +281,6 @@ if __name__ == '__main__':
     _plot_country_monthly_temp(df, output_path=COUNTRY_MONTHLY_TEMP_PLOT_PATH)
 
     # Question 5 - Fitting model for different values of `k`
-    # split dataset
     train, test = _split_train_test(israel_data, train_size=TRAIN_SIZE, random_state=SEED)
     test_errors = _fit_and_evaluate_polynomial_models(train, test, output_path=TEST_ERROR_PLOT_PATH)
 

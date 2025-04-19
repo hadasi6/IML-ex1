@@ -245,8 +245,8 @@ if __name__ == '__main__':
     X, y = df.drop("price", axis=1), df.price
 
     # Question 2 - split train test
-    # X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=0.75, random_state=RANDOM_SEED)
     X_train, X_test, y_train, y_test = _split_train_test(X, y, train_size=TRAIN_SIZE, random_state=SEED)
+    
     # Question 3 - preprocessing of housing prices train dataset
     X_train, y_train = preprocess_train(X_train, y_train)
 
