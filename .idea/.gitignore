@@ -14,7 +14,7 @@ training_size_vs_mse.png
 ex1_207848615.zip
 Answrs.pdf
 
-.feature_evaluation/
+feature_evaluation/
 
 # Ignore virtual environment
 venv/
